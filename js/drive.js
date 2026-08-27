@@ -76,38 +76,48 @@ const Drive = (() => {
     return res.headers.get("Location");
   }
 
-  // Uploads one chunk. Total size is always sent as "*" (unknown) during
-  // recording — we never guess which chunk is "the last one" here, which
-  // removes the race condition that used to leave uploads unfinished.
+  // Uploads an INTERMEDIATE chunk (recording still going, total size unknown).
+  // IMPORTANT: per Google's resumable-upload rules, size must be a multiple
+  // of 256 KiB (262144 bytes) for every chunk except the very last one.
   async function uploadChunk(sessionUrl, blobChunk, rangeStart) {
     const rangeEnd = rangeStart + blobChunk.size - 1;
-    const contentRange = `bytes ${rangeStart}-${rangeEnd}/*`;
     const res = await fetch(sessionUrl, {
       method: "PUT",
-      headers: {
-        "Content-Length": blobChunk.size,
-        "Content-Range": contentRange
-      },
+      headers: { "Content-Range": `bytes ${rangeStart}-${rangeEnd}/*` },
       body: blobChunk
     });
     if (res.status === 308) return { done: false }; // expected: more data coming
     if (res.status === 200 || res.status === 201) {
       const data = await res.json();
-      return { done: true, fileId: data.id }; // rare but handle it just in case
+      return { done: true, fileId: data.id };
     }
     throw new Error("Chunk upload fail hua: " + res.status);
   }
 
-  // Call this ONCE, only after the recorder has fully stopped AND every
-  // queued chunk has finished uploading. Tells Drive "that's everything,
-  // total size was X" so it finalizes the file properly.
+  // Uploads the FINAL chunk once the recorder has stopped — this one can be
+  // any size (no 256 KiB alignment needed) because we now tell Drive the
+  // real total size, which finalizes the file in this same call.
+  async function uploadFinalChunk(sessionUrl, blobChunk, rangeStart, totalSize) {
+    const rangeEnd = rangeStart + blobChunk.size - 1;
+    const res = await fetch(sessionUrl, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes ${rangeStart}-${rangeEnd}/${totalSize}` },
+      body: blobChunk
+    });
+    if (res.status === 200 || res.status === 201) {
+      const data = await res.json();
+      return { done: true, fileId: data.id };
+    }
+    throw new Error("Final chunk upload fail hua: " + res.status);
+  }
+
+  // Edge case: recording stopped exactly on a 256 KiB boundary, so there's
+  // no leftover data to send — this just tells Drive "that's the total,
+  // you already have it all" and closes the file out.
   async function finalizeUpload(sessionUrl, totalSize) {
     const res = await fetch(sessionUrl, {
       method: "PUT",
-      headers: {
-        "Content-Length": "0",
-        "Content-Range": `bytes */${totalSize}`
-      }
+      headers: { "Content-Range": `bytes */${totalSize}` }
     });
     if (res.status === 200 || res.status === 201) {
       const data = await res.json();
@@ -128,5 +138,5 @@ const Drive = (() => {
     return res.json();
   }
 
-  return { signIn, isSignedIn, startResumableSession, uploadChunk, finalizeUpload, makeShareable };
+  return { signIn, isSignedIn, startResumableSession, uploadChunk, uploadFinalChunk, finalizeUpload, makeShareable };
 })();
