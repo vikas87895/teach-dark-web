@@ -76,11 +76,12 @@ const Drive = (() => {
     return res.headers.get("Location");
   }
 
-  // Uploads one chunk. `isFinal` true on the very last chunk (totalSize known).
-  // Returns { done, fileId } when finished, else { done:false }
-  async function uploadChunk(sessionUrl, blobChunk, rangeStart, totalSizeOrStar) {
+  // Uploads one chunk. Total size is always sent as "*" (unknown) during
+  // recording — we never guess which chunk is "the last one" here, which
+  // removes the race condition that used to leave uploads unfinished.
+  async function uploadChunk(sessionUrl, blobChunk, rangeStart) {
     const rangeEnd = rangeStart + blobChunk.size - 1;
-    const contentRange = `bytes ${rangeStart}-${rangeEnd}/${totalSizeOrStar}`;
+    const contentRange = `bytes ${rangeStart}-${rangeEnd}/*`;
     const res = await fetch(sessionUrl, {
       method: "PUT",
       headers: {
@@ -89,15 +90,30 @@ const Drive = (() => {
       },
       body: blobChunk
     });
+    if (res.status === 308) return { done: false }; // expected: more data coming
+    if (res.status === 200 || res.status === 201) {
+      const data = await res.json();
+      return { done: true, fileId: data.id }; // rare but handle it just in case
+    }
+    throw new Error("Chunk upload fail hua: " + res.status);
+  }
+
+  // Call this ONCE, only after the recorder has fully stopped AND every
+  // queued chunk has finished uploading. Tells Drive "that's everything,
+  // total size was X" so it finalizes the file properly.
+  async function finalizeUpload(sessionUrl, totalSize) {
+    const res = await fetch(sessionUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Length": "0",
+        "Content-Range": `bytes */${totalSize}`
+      }
+    });
     if (res.status === 200 || res.status === 201) {
       const data = await res.json();
       return { done: true, fileId: data.id };
     }
-    if (res.status === 308) {
-      // incomplete, continue
-      return { done: false };
-    }
-    throw new Error("Chunk upload fail hua: " + res.status);
+    throw new Error("Upload finalize fail hua: " + res.status);
   }
 
   async function makeShareable(fileId) {
@@ -112,5 +128,5 @@ const Drive = (() => {
     return res.json();
   }
 
-  return { signIn, isSignedIn, startResumableSession, uploadChunk, makeShareable };
+  return { signIn, isSignedIn, startResumableSession, uploadChunk, finalizeUpload, makeShareable };
 })();
