@@ -258,11 +258,13 @@ let recording = false;
 let compositeStream = null;
 let compositeRAF = null;
 let sessionUrl = null;
-let uploadOffset = 0;
-let uploadQueue = [];
+let uploadOffset = 0;       // bytes already confirmed uploaded to Drive
+let pendingBuffer = [];     // Blob pieces recorded but not yet sent
+let pendingBytes = 0;
 let uploadingChunk = false;
 let recorderStopped = false;
 let localChunksFallback = []; // used if Drive isn't connected
+const CHUNK_ALIGN = 262144 * 4; // 1 MiB — must be a multiple of 256 KiB per Drive's API rules
 let recordStartTime = 0;
 let timerInterval = null;
 
@@ -302,7 +304,7 @@ async function startRecording() {
       ? "video/webm;codecs=vp9,opus" : "video/webm";
     mediaRecorder = new MediaRecorder(compositeStream, { mimeType: mime, videoBitsPerSecond: 2_500_000 });
 
-    uploadOffset = 0; uploadQueue = []; localChunksFallback = [];
+    uploadOffset = 0; pendingBuffer = []; pendingBytes = 0; localChunksFallback = [];
     sessionUrl = null; recorderStopped = false;
 
     if (Drive.isSignedIn()) {
@@ -314,7 +316,7 @@ async function startRecording() {
 
     mediaRecorder.ondataavailable = e => {
       if (e.data && e.data.size > 0) {
-        if (sessionUrl) { uploadQueue.push(e.data); runUploadWorker(); }
+        if (sessionUrl) { pendingBuffer.push(e.data); pendingBytes += e.data.size; runUploadWorker(); }
         else { localChunksFallback.push(e.data); }
       }
     };
@@ -352,44 +354,80 @@ function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
 }
 
-// Single worker: uploads whatever is in uploadQueue, in order. Chunks are
-// always sent with an unknown total ("*") — we never guess which one is
-// "the last" mid-stream. Only once the recorder has fully stopped AND the
-// queue is completely empty do we send one explicit finalize call with the
-// now-known total size. This avoids the old race where the last chunk and
-// the stop event could finalize in the wrong order and leave the upload stuck.
+// Slices exactly `size` bytes off the front of pendingBuffer, leaving the
+// remainder behind for next time. Needed because MediaRecorder's chunks
+// almost never land on a 256 KiB boundary by themselves.
+function takeFromBuffer(size) {
+  const merged = new Blob(pendingBuffer);
+  const piece = merged.slice(0, size);
+  const rest = merged.slice(size);
+  pendingBuffer = rest.size > 0 ? [rest] : [];
+  pendingBytes = rest.size;
+  return piece;
+}
+
+async function completeUpload(fileId) {
+  const info = await Drive.makeShareable(fileId);
+  saveVideoMeta({ driveFileId: fileId, link: info.webViewLink || "", sizeBytes: uploadOffset });
+  setStatus("✅ Upload complete! Gallery me ja rahe hain...");
+  setTimeout(() => location.href = `gallery.html?edit=${lastSavedVideoId}`, 900);
+}
+
+// Single worker: while recording, only sends data in clean 1 MiB-aligned
+// chunks (Drive requires multiples of 256 KiB for every chunk except the
+// last). Once the recorder has fully stopped, it sends whatever remains as
+// the final chunk with the now-known total size, which closes the upload
+// out properly in one call — no more guessing which chunk is "the last one".
 async function runUploadWorker() {
-  if (uploadingChunk) return; // already running, it'll pick up new items itself
+  if (uploadingChunk) return;
   uploadingChunk = true;
   try {
-    while (uploadQueue.length) {
-      const chunk = uploadQueue[0];
-      try {
-        await Drive.uploadChunk(sessionUrl, chunk, uploadOffset);
-        uploadOffset += chunk.size;
-        uploadQueue.shift();
-        if (recording || recorderStopped) {
-          setStatus(recorderStopped
-            ? `Upload ho raha hai... (${(uploadOffset / 1024 / 1024).toFixed(1)} MB)`
-            : `🔴 Recording... Drive par upload ho raha hai (${(uploadOffset / 1024 / 1024).toFixed(1)} MB)`);
+    while (true) {
+      if (!recorderStopped) {
+        if (pendingBytes < CHUNK_ALIGN) break; // not enough buffered yet, wait for more
+        const sendSize = Math.floor(pendingBytes / CHUNK_ALIGN) * CHUNK_ALIGN;
+        const piece = takeFromBuffer(sendSize);
+        try {
+          await Drive.uploadChunk(sessionUrl, piece, uploadOffset);
+          uploadOffset += piece.size;
+          setStatus(`🔴 Recording... Drive par upload ho raha hai (${(uploadOffset / 1024 / 1024).toFixed(1)} MB)`);
+        } catch (err) {
+          console.error(err);
+          pendingBuffer.unshift(piece); pendingBytes += piece.size; // put it back
+          setStatus("⚠️ Upload chunk fail hua, retry ho raha hai...", true);
+          await new Promise(r => setTimeout(r, 2500));
         }
-      } catch (err) {
-        console.error(err);
-        setStatus("⚠️ Upload chunk fail hua, retry ho raha hai...", true);
-        await new Promise(r => setTimeout(r, 2500)); // retry same chunk, don't drop it
+      } else {
+        if (pendingBytes > 0) {
+          const piece = takeFromBuffer(pendingBytes);
+          const total = uploadOffset + piece.size;
+          try {
+            setStatus(`Final chunk upload ho raha hai... (${(total / 1024 / 1024).toFixed(1)} MB)`);
+            const res = await Drive.uploadFinalChunk(sessionUrl, piece, uploadOffset, total);
+            uploadOffset += piece.size;
+            await completeUpload(res.fileId);
+          } catch (err) {
+            console.error(err);
+            pendingBuffer.unshift(piece); pendingBytes += piece.size;
+            setStatus("⚠️ Final upload fail hua, retry ho raha hai...", true);
+            await new Promise(r => setTimeout(r, 2500));
+            continue;
+          }
+        } else if (uploadOffset > 0) {
+          try {
+            const res = await Drive.finalizeUpload(sessionUrl, uploadOffset);
+            await completeUpload(res.fileId);
+          } catch (err) {
+            console.error(err);
+            setStatus("⚠️ Finalize fail hua, retry ho raha hai...", true);
+            await new Promise(r => setTimeout(r, 2500));
+            continue;
+          }
+        } else {
+          setStatus("Recording khali thi, kuch upload nahi hua.", true);
+        }
+        break;
       }
-    }
-    if (recorderStopped && uploadQueue.length === 0) {
-      if (uploadOffset === 0) {
-        setStatus("Recording khali thi, kuch upload nahi hua.", true);
-        return;
-      }
-      setStatus("Upload ko finalize kiya ja raha hai...");
-      const res = await Drive.finalizeUpload(sessionUrl, uploadOffset);
-      const info = await Drive.makeShareable(res.fileId);
-      saveVideoMeta({ driveFileId: res.fileId, link: info.webViewLink || "", sizeBytes: uploadOffset });
-      setStatus("✅ Upload complete! Gallery me ja rahe hain...");
-      setTimeout(() => location.href = `gallery.html?edit=${lastSavedVideoId}`, 900);
     }
   } finally {
     uploadingChunk = false;
