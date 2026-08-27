@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apna Style Study :: TEACH.SYS</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body{overflow-x:hidden;}
+  .teach-top{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 20px;
+    border-bottom:1px solid var(--line); background:var(--bg-panel); position:sticky; top:0; z-index:50;
+  }
+  .toolgroup{display:flex; gap:6px; align-items:center; padding:0 10px; border-right:1px solid var(--line);}
+  .toolgroup:last-child{border-right:none;}
+  .tool-btn{
+    width:36px; height:36px; border-radius:7px; border:1px solid var(--line); background:var(--bg-raised);
+    color:var(--text-dim); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center;
+  }
+  .tool-btn.active{border-color:var(--green); color:var(--green); background:rgba(0,255,157,0.08);}
+  .swatch{width:20px;height:20px;border-radius:5px;border:2px solid transparent;cursor:pointer;}
+  .swatch.active{border-color:#fff;}
+  input[type=range]{width:80px;}
+  #stage-wrap{
+    display:flex; justify-content:center; padding:26px 16px 60px; position:relative;
+  }
+  #stage{
+    position:relative; box-shadow:0 20px 60px rgba(0,0,0,0.5); border:1px solid var(--line); border-radius:6px; overflow:hidden;
+    background:#000;
+  }
+  #stage canvas{position:absolute; top:0; left:0;}
+  #drawCanvas{cursor:crosshair;}
+  #logoImg{position:absolute; cursor:move; user-select:none; z-index:5; display:none; max-width:120px; max-height:120px;}
+  .rec-btn{
+    display:flex; align-items:center; gap:8px; padding:9px 18px; border-radius:24px;
+    border:1px solid #7a2c2c; color:var(--red); background:transparent; font-family:var(--mono); font-weight:700; cursor:pointer;
+  }
+  .rec-btn.live{background:rgba(255,92,92,0.12); box-shadow:0 0 18px rgba(255,92,92,0.25);}
+  .rec-dot{width:10px;height:10px;border-radius:50%;background:var(--red);}
+  .rec-btn.live .rec-dot{animation:pulse 1s infinite;}
+  #status-line{font-size:11px; color:var(--text-dim); padding:0 20px 10px;}
+  #status-line.live{color:var(--green);}
+  #pageNav{font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:8px;}
+  .spacer{flex:1;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span>APNA_STYLE<small>&nbsp;// TEACH.SYS</small></div>
+  <nav>
+    <a href="index.html">source.load</a>
+    <a href="gallery.html">apna style study</a>
+  </nav>
+</div>
+
+<div class="teach-top">
+  <div class="toolgroup">
+    <button class="tool-btn active" id="toolPen" title="Pen">✏️</button>
+    <button class="tool-btn" id="toolHighlighter" title="Highlighter">🖊️</button>
+    <button class="tool-btn" id="toolRect" title="Rectangle">▭</button>
+    <button class="tool-btn" id="toolCircle" title="Circle">◯</button>
+    <button class="tool-btn" id="toolLine" title="Line">╱</button>
+    <button class="tool-btn" id="toolText" title="Animated Text">🔤</button>
+    <button class="tool-btn" id="toolEraser" title="Eraser">🧽</button>
+  </div>
+  <div class="toolgroup">
+    <span class="swatch active" data-c="#00ff9d" style="background:#00ff9d"></span>
+    <span class="swatch" data-c="#ffb454" style="background:#ffb454"></span>
+    <span class="swatch" data-c="#ff5c5c" style="background:#ff5c5c"></span>
+    <span class="swatch" data-c="#5cb8ff" style="background:#5cb8ff"></span>
+    <span class="swatch" data-c="#ffffff" style="background:#ffffff"></span>
+    <input type="range" id="brushSize" min="1" max="40" value="4">
+  </div>
+  <div class="toolgroup">
+    <button class="tool-btn" id="undoBtn" title="Undo">↶</button>
+    <button class="tool-btn" id="clearBtn" title="Clear all">🗑️</button>
+    <button class="tool-btn" id="logoToggle" title="Toggle logo overlay">🖼️</button>
+  </div>
+  <div class="toolgroup" id="pageNav" style="display:none;">
+    <button class="btn small" id="prevPage">◀</button>
+    <span id="pageLabel">1 / 1</span>
+    <button class="btn small" id="nextPage">▶</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="toolgroup">
+    <button class="btn small" id="driveSignInBtn">🔗 Drive Connect</button>
+  </div>
+  <div class="toolgroup" style="border-right:none;">
+    <button class="rec-btn" id="recBtn"><span class="rec-dot"></span><span id="recLabel">Record</span></button>
+  </div>
+</div>
+<div id="status-line">Ready.</div>
+
+<div id="stage-wrap">
+  <div id="stage">
+    <canvas id="pdfCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+    <img id="logoImg" src="">
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/drive.js"></script>
+<script src="js/teach.js"></script>
+</body>
+</html>
