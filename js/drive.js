@@ -54,24 +54,24 @@ const Drive = (() => {
     return youtubeTokenClient;
   }
 
-  // Dono logins ek ke baad ek karta hai (do popups aa sakte hain pehli
-  // baar). Agar YouTube wala deny/cancel ho jaaye to bhi Drive connected
-  // rahega — sirf YouTube upload feature disable rahega, poora flow
-  // fail nahi hoga.
+  // Sirf Drive connect karta hai — is button click se seedha popup khulta
+  // hai (koi chaining nahi), isliye browser ka popup blocker ise kabhi
+  // rokta nahi.
   async function signIn() {
     if (!ready()) throw new Error("Google script load nahi hua. Internet check karo.");
-
     accessToken = await requestToken(getOrCreateDriveClient(), CONFIG.DRIVE_SCOPES, accessToken ? "" : "consent");
     localStorage.setItem("ass_drive_connected", "1");
-
-    try {
-      youtubeAccessToken = await requestToken(getOrCreateYouTubeClient(), CONFIG.YOUTUBE_SCOPES, youtubeAccessToken ? "" : "consent");
-      localStorage.setItem("ass_youtube_connected", "1");
-    } catch (e) {
-      console.warn("YouTube connect skip/deny hua, Drive upload chalega:", e);
-    }
-
     return accessToken;
+  }
+
+  // Alag button se call hota hai — apna khud ka fresh click-triggered
+  // popup, isliye pichle Drive login ke chained call ki tarah blocked
+  // nahi hota.
+  async function signInYouTube() {
+    if (!ready()) throw new Error("Google script load nahi hua. Internet check karo.");
+    youtubeAccessToken = await requestToken(getOrCreateYouTubeClient(), CONFIG.YOUTUBE_SCOPES, youtubeAccessToken ? "" : "consent");
+    localStorage.setItem("ass_youtube_connected", "1");
+    return youtubeAccessToken;
   }
 
   // Called automatically on page load. If the person connected before
@@ -211,7 +211,7 @@ const Drive = (() => {
   }
 
   return {
-    signIn, trySilentSignIn, isSignedIn, getAccessToken, getYouTubeAccessToken,
+    signIn, signInYouTube, trySilentSignIn, isSignedIn, getAccessToken, getYouTubeAccessToken,
     disconnect, startResumableSession, uploadChunk, uploadFinalChunk,
     finalizeUpload, makeShareable
   };
