@@ -237,23 +237,43 @@ document.getElementById("logoToggle").onclick = () => {
 // Google Drive/YouTube sign-in (persists across refresh once connected)
 // ------------------------------------------------------------------
 const driveSignInBtn = document.getElementById("driveSignInBtn");
+const youtubeSignInBtn = document.getElementById("youtubeSignInBtn");
 
+// Drive connect: seedha click se popup khulta hai. Kaamyaab hote hi
+// YouTube Connect button reveal ho jaata hai — usko dabana ek naya,
+// alag click hai isliye uska popup kabhi block nahi hota.
 async function connectGoogle(showConsentIfNeeded) {
   try {
-    setStatus("Google se connect ho raha hai...");
+    setStatus("Google Drive se connect ho raha hai...");
     await Drive.signIn();
-    setStatus("Connected ✅ Ab record karke seedha upload hoga.");
-    driveSignInBtn.textContent = "✅ Connected";
+    setStatus("Drive Connected ✅ — ab 'YouTube Connect' bhi dabao (YouTube upload ke liye zaroori hai, Drive-only recording ke liye zaroori nahi).");
+    driveSignInBtn.textContent = "✅ Drive Connected";
+    youtubeSignInBtn.style.display = "inline-block";
   } catch (e) {
     console.error(e);
-    if (showConsentIfNeeded) setStatus("Connect fail hua. config.js me CLIENT_ID check karo.", true);
+    if (showConsentIfNeeded) setStatus("Drive connect fail hua. config.js me CLIENT_ID check karo, ya popup blocker check karo.", true);
   }
 }
 driveSignInBtn.onclick = () => connectGoogle(true);
 
+// YouTube connect: apna khud ka fresh click, Drive login se poori tarah
+// alag — isliye browser ka popup blocker ise kabhi nahi rokta.
+async function connectYouTube() {
+  try {
+    setStatus("YouTube se connect ho raha hai...");
+    await Drive.signInYouTube();
+    setStatus("YouTube Connected ✅ — ab YouTube target select karke record kar sakte ho.");
+    youtubeSignInBtn.textContent = "✅ YouTube Connected";
+  } catch (e) {
+    console.error(e);
+    setStatus("YouTube connect fail/deny hua. Drive upload phir bhi kaam karega.", true);
+  }
+}
+youtubeSignInBtn.onclick = connectYouTube;
+
 // Auto-attempt on every page load: if we connected before and the Google
 // browser session is still active, this reconnects silently — no click,
-// no "verify again" needed.
+// no popup (silent token refresh, so chaining both here is safe).
 (async function attemptAutoReconnect() {
   // give the Google script a moment to finish loading
   for (let i = 0; i < 20 && !ready_gsi(); i++) await new Promise(r => setTimeout(r, 150));
@@ -261,7 +281,13 @@ driveSignInBtn.onclick = () => connectGoogle(true);
   try {
     await Drive.trySilentSignIn();
     setStatus("Connected ✅ (auto-reconnect) — record karke seedha upload hoga.");
-    driveSignInBtn.textContent = "✅ Connected";
+    driveSignInBtn.textContent = "✅ Drive Connected";
+    if (Drive.getYouTubeAccessToken()) {
+      youtubeSignInBtn.textContent = "✅ YouTube Connected";
+      youtubeSignInBtn.style.display = "inline-block";
+    } else {
+      youtubeSignInBtn.style.display = "inline-block";
+    }
   } catch (e) {
     // silent attempt failed (never connected before, or session expired) — that's fine, button stays clickable
   }
