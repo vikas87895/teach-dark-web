@@ -361,7 +361,8 @@ function stopCompositeLoop() { if (compositeRAF) cancelAnimationFrame(compositeR
 recBtn.onclick = async () => {
   if (recording) { stopRecording(); return; }
   if (uploadTarget === "youtube") {
-    if (!Drive.isSignedIn()) { alert("Pehle Google Connect karo (YouTube upload ke liye bhi wahi login chahiye)."); return; }
+    if (!Drive.isSignedIn()) { alert("Pehle Google Connect karo."); return; }
+    if (!Drive.getYouTubeAccessToken()) { alert("YouTube login connect nahi hua. 'Connect' button dobara dabao aur dono popups allow karo."); return; }
     ytModal.style.display = "flex";
     document.getElementById("ytTitle").focus();
   } else {
