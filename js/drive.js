@@ -2,59 +2,95 @@
   DRIVE.js — Google Identity Services (OAuth) + Drive v3 resumable upload
   Chunk-by-chunk upload hota hai taaki recording ke saath-saath video
   Drive par jaati rahe aur device ka storage bharke na rakhe.
+
+  IMPORTANT: Drive aur YouTube ab do ALAG OAuth token clients use karte
+  hain (do alag consent popups, ek ke baad ek). Google ek hi request me
+  YouTube ka restricted scope aur Drive ka scope saath maangne se
+  reject kar deta hai. signIn() / trySilentSignIn() dono ab andar hi
+  andar dono logins kar lete hain — bahar ka interface (teach.js) same
+  hi rehta hai, kuch change karne ki zaroorat nahi.
 */
 
 const Drive = (() => {
-  let tokenClient = null;
-  let accessToken = null;
+  let driveTokenClient = null;
+  let youtubeTokenClient = null;
+  let accessToken = null;      // Drive token
+  let youtubeAccessToken = null;
   let folderId = null;
 
   function ready() {
     return !!(window.google && google.accounts && google.accounts.oauth2);
   }
 
-  function signIn() {
+  function requestToken(client, scope, prompt) {
     return new Promise((resolve, reject) => {
-      if (!ready()) return reject(new Error("Google script load nahi hua. Internet check karo."));
-      if (!tokenClient) {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: CONFIG.GOOGLE_CLIENT_ID,
-          scope: CONFIG.SCOPES,
-          callback: () => {}
-        });
-      }
-      tokenClient.callback = (resp) => {
+      client.callback = (resp) => {
         if (resp.error) return reject(resp);
-        accessToken = resp.access_token;
-        localStorage.setItem("ass_drive_connected", "1");
-        resolve(accessToken);
+        resolve(resp.access_token);
       };
-      tokenClient.requestAccessToken({ prompt: accessToken ? "" : "consent" });
+      client.requestAccessToken({ prompt });
     });
+  }
+
+  function getOrCreateDriveClient() {
+    if (!driveTokenClient) {
+      driveTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        scope: CONFIG.DRIVE_SCOPES,
+        callback: () => {}
+      });
+    }
+    return driveTokenClient;
+  }
+
+  function getOrCreateYouTubeClient() {
+    if (!youtubeTokenClient) {
+      youtubeTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        scope: CONFIG.YOUTUBE_SCOPES,
+        callback: () => {}
+      });
+    }
+    return youtubeTokenClient;
+  }
+
+  // Dono logins ek ke baad ek karta hai (do popups aa sakte hain pehli
+  // baar). Agar YouTube wala deny/cancel ho jaaye to bhi Drive connected
+  // rahega — sirf YouTube upload feature disable rahega, poora flow
+  // fail nahi hoga.
+  async function signIn() {
+    if (!ready()) throw new Error("Google script load nahi hua. Internet check karo.");
+
+    accessToken = await requestToken(getOrCreateDriveClient(), CONFIG.DRIVE_SCOPES, accessToken ? "" : "consent");
+    localStorage.setItem("ass_drive_connected", "1");
+
+    try {
+      youtubeAccessToken = await requestToken(getOrCreateYouTubeClient(), CONFIG.YOUTUBE_SCOPES, youtubeAccessToken ? "" : "consent");
+      localStorage.setItem("ass_youtube_connected", "1");
+    } catch (e) {
+      console.warn("YouTube connect skip/deny hua, Drive upload chalega:", e);
+    }
+
+    return accessToken;
   }
 
   // Called automatically on page load. If the person connected before
   // (flag in localStorage) and their Google browser session is still
-  // active, this gets a fresh token silently — no click, no popup.
-  function trySilentSignIn() {
-    return new Promise((resolve, reject) => {
-      if (!ready() || localStorage.getItem("ass_drive_connected") !== "1") {
-        return reject(new Error("no-prior-connection"));
+  // active, this gets fresh tokens silently — no click, no popup.
+  async function trySilentSignIn() {
+    if (!ready() || localStorage.getItem("ass_drive_connected") !== "1") {
+      throw new Error("no-prior-connection");
+    }
+    accessToken = await requestToken(getOrCreateDriveClient(), CONFIG.DRIVE_SCOPES, "");
+
+    if (localStorage.getItem("ass_youtube_connected") === "1") {
+      try {
+        youtubeAccessToken = await requestToken(getOrCreateYouTubeClient(), CONFIG.YOUTUBE_SCOPES, "");
+      } catch (e) {
+        console.warn("YouTube silent reconnect fail hua:", e);
       }
-      if (!tokenClient) {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: CONFIG.GOOGLE_CLIENT_ID,
-          scope: CONFIG.SCOPES,
-          callback: () => {}
-        });
-      }
-      tokenClient.callback = (resp) => {
-        if (resp.error) return reject(resp);
-        accessToken = resp.access_token;
-        resolve(accessToken);
-      };
-      tokenClient.requestAccessToken({ prompt: "" });
-    });
+    }
+    return accessToken;
   }
 
   function isSignedIn() {
@@ -65,9 +101,15 @@ const Drive = (() => {
     return accessToken;
   }
 
+  function getYouTubeAccessToken() {
+    return youtubeAccessToken;
+  }
+
   function disconnect() {
     accessToken = null;
+    youtubeAccessToken = null;
     localStorage.removeItem("ass_drive_connected");
+    localStorage.removeItem("ass_youtube_connected");
   }
 
   async function ensureFolder() {
@@ -168,5 +210,9 @@ const Drive = (() => {
     return res.json();
   }
 
-  return { signIn, trySilentSignIn, isSignedIn, getAccessToken, disconnect, startResumableSession, uploadChunk, uploadFinalChunk, finalizeUpload, makeShareable };
+  return {
+    signIn, trySilentSignIn, isSignedIn, getAccessToken, getYouTubeAccessToken,
+    disconnect, startResumableSession, uploadChunk, uploadFinalChunk,
+    finalizeUpload, makeShareable
+  };
 })();
