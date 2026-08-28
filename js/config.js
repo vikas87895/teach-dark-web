@@ -2,32 +2,32 @@
   ================================================================
   APNA STYLE STUDY — CONFIG
   ================================================================
-  Google Drive par recordings upload karne ke liye tumhe do cheezein
-  Google Cloud Console (console.cloud.google.com) se free me leni hongi:
+  Google isn't letting Drive + YouTube scopes coexist even in
+  separate requests when they're declared together on the SAME
+  Cloud project's OAuth consent screen. So Drive aur YouTube ab
+  do ALAG Google Cloud projects se aate hain — do alag Client IDs.
 
-  1. OAuth Client ID   -> "APIs & Services > Credentials > Create OAuth client ID"
-                          Application type: "Web application"
-                          Authorized JavaScript origins me apna GitHub Pages URL daalo
-                          e.g. https://<username>.github.io
+  DRIVE Client ID:
+  1. console.cloud.google.com par apna Drive-wala project kholo
+  2. APIs & Services > Credentials > OAuth client ID > Web application
+  3. Authorized JavaScript origins me apna GitHub Pages URL daalo
+  4. Consent screen > Data Access me SIRF drive.file scope rakho
 
-  2. API Key           -> "APIs & Services > Credentials > Create API key"
-                          (Drive API ke liye restrict kar dena, safe rahega)
+  YOUTUBE Client ID:
+  1. Ek NAYA, alag Cloud project banao
+  2. YouTube Data API v3 enable karo
+  3. OAuth client ID (Web application) banao, wahi GitHub Pages URL
+  4. Consent screen > Data Access me SIRF youtube.upload scope rakho
 
-  Ye dono niche paste kar do. Poora setup guide README.md me hai.
-
-  NOTE: Drive aur YouTube ke scopes ab do ALAG requests me maange jaate
-  hain (do alag login popups). Google ek hi consent screen me YouTube
-  ke restricted scope ko Drive ke scope ke saath maangne se deny kar
-  deta hai ("scopes that cannot be requested together" error) — isliye
-  ye split zaroori hai. youtube.force-ssl bhi hata diya hai kyunki
-  thumbnail set karne ke liye sirf youtube.upload hi kaafi hai.
+  API Key -> "APIs & Services > Credentials > Create API key"
+             (Drive API ke liye restrict kar dena, safe rahega)
   ================================================================
 */
 
 const CONFIG = {
-  GOOGLE_CLIENT_ID: "103117215308-p6udj0ikgfboqmu7aepfnqlohgsqh87t.apps.googleusercontent.com",
+  DRIVE_CLIENT_ID: "103117215308-p6udj0ikgfboqmu7aepfnqlohgsqh87t.apps.googleusercontent.com",
+  YOUTUBE_CLIENT_ID: "519454741035-jm5mltqm1ltiojmpcl23rnu8c9s9mc89.apps.googleusercontent.com",
   GOOGLE_API_KEY: "PASTE_YOUR_API_KEY_HERE",
-  // Do alag scope groups — do alag OAuth requests me maange jaayenge
   DRIVE_SCOPES: "https://www.googleapis.com/auth/drive.file",
   YOUTUBE_SCOPES: "https://www.googleapis.com/auth/youtube.upload",
   DRIVE_FOLDER_NAME: "Apna Style Study Recordings",
