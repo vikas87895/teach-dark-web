@@ -1,7 +1,8 @@
 /*
   YOUTUBE.js — YouTube Data API v3 resumable upload + thumbnail
-  Same login (token) as Drive.js reuses — Drive.getAccessToken() already
-  has the youtube.upload + youtube.force-ssl scopes granted together.
+  Apna alag token use karta hai (Drive.getYouTubeAccessToken()) kyunki
+  YouTube aur Drive ke scopes ab do alag OAuth requests me maange
+  jaate hain — Google unhe ek saath maangne se reject kar deta hai.
 */
 
 const YouTube = (() => {
@@ -9,7 +10,7 @@ const YouTube = (() => {
   // Starts a resumable upload session with the video's metadata already
   // attached (title/description/tags/privacy). Returns the session URL.
   async function startResumableSession({ title, description, tags, privacy }) {
-    const token = Drive.getAccessToken();
+    const token = Drive.getYouTubeAccessToken();
     const body = {
       snippet: {
         title: title || "Apna Style Study Lecture",
@@ -78,7 +79,7 @@ const YouTube = (() => {
   // fail with a 403, which we surface but don't treat as a fatal error
   // (the video itself is already uploaded fine).
   async function setThumbnail(videoId, imageBlob) {
-    const token = Drive.getAccessToken();
+    const token = Drive.getYouTubeAccessToken();
     const res = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${videoId}&uploadType=media`, {
       method: "POST",
       headers: {
