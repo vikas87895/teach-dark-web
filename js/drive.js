@@ -35,7 +35,7 @@ const Drive = (() => {
   function getOrCreateDriveClient() {
     if (!driveTokenClient) {
       driveTokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        client_id: CONFIG.DRIVE_CLIENT_ID,
         scope: CONFIG.DRIVE_SCOPES,
         callback: () => {}
       });
@@ -46,7 +46,7 @@ const Drive = (() => {
   function getOrCreateYouTubeClient() {
     if (!youtubeTokenClient) {
       youtubeTokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        client_id: CONFIG.YOUTUBE_CLIENT_ID,
         scope: CONFIG.YOUTUBE_SCOPES,
         callback: () => {}
       });
